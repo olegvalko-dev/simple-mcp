@@ -1,0 +1,10 @@
+{
+    "name": "valko/simple-mcp",
+    "description": "Private MCP server for WordPress (Claude Code integration).",
+    "type": "wordpress-plugin",
+    "license": "proprietary",
+    "require": {
+        "php": ">=8.0",
+        "composer/installers": "^2.0"
+    }
+}
