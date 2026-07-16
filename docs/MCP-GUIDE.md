@@ -166,8 +166,10 @@ translate_apply {source_id:123, lang:"ru",
   same blockName as the source, and field keys must already exist in the target.
 
 ### Delete safely
-`safe_delete {post_id}` — refuses if translations exist (lists them); pass `allow_cascade:true`
-to delete **only** that post (siblings are never cascaded). Prefer trashing (omit `force`).
+`safe_delete {post_id}` — refuses if translations exist (lists them). Then choose the scope
+explicitly: `allow_cascade:true` deletes **only** that post (siblings stay; wp-loc's own
+group-cascade is suppressed for the call), or `delete_translations:true` deletes the **whole
+translation group** (this post + every linked sibling). Prefer trashing (omit `force`).
 
 ### WooCommerce product data (optional `wp-loc-woocommerce` addon)
 ```
