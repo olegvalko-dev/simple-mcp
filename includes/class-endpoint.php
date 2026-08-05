@@ -149,28 +149,30 @@ class Simple_MCP_Endpoint {
             $roles = implode(', ', array_map('translate_user_role', array_map(function ($slug) {
                 return wp_roles()->roles[$slug]['name'] ?? $slug;
             }, (array) $u->roles)));
-            $r[] = 'You are authenticated as WordPress user "' . $u->user_login . '" (role: ' . ($roles ?: '—') . '). Every operation runs under THIS user\'s native WordPress capabilities — you cannot read/edit/publish/delete anything this user could not in wp-admin, and capability-denied errors are expected behavior, not bugs. Tool groups this user\'s role is not granted are hidden from tools/list entirely.';
+            $r[] = 'You are authenticated as WordPress user "' . $u->user_login . '" (role: ' . ($roles ?: '—') . '). Every TYPED tool runs under THIS user\'s native WordPress capabilities — it cannot read/edit/publish/delete anything this user could not in wp-admin, and capability-denied errors are expected behavior, not bugs. Tool groups this user\'s role is not granted are hidden from tools/list entirely.';
         }
-        $r[] = 'Simple MCP\'s main job is CONTENT (pages/blocks, ACF, media, taxonomies, translations). Theme & plugin CODE (editing PHP/JS/CSS files) is managed via git + CI/CD — never edit theme or plugin files here.';
+        $r[] = 'Simple MCP\'s main job is CONTENT (pages/blocks, ACF, media, taxonomies, translations). Theme and plugin CODE (editing PHP/JS/CSS files) is managed from versioned sources — site themes via git/CI/CD and Simple MCP via its own GitHub updater — so never edit source files here.';
         if (!$cli) {
             $r[] = 'Raw wp_cli is not available to this user (typed-only mode) — use the typed tools.';
+        } else {
+            $r[] = 'Raw wp_cli is a separate privileged subprocess and does NOT inherit this HTTP user\'s object-level capability checks. It is exposed only because this user has a manage_options role; treat it as god-mode and prefer typed tools.';
         }
         if ($server) {
-            $r[] = 'Server ops ARE ENABLED on this site: you MAY edit wp-config directives and install/update/remove whole plugins or themes via wp_cli (config and the plugin set legitimately differ per environment — only the theme is versioned). ALWAYS confirm DESTRUCTIVE server ops with the user first: deleting ACF or another critical plugin, or changing security/DB config.';
+            $r[] = 'Server ops ARE ENABLED on this site: you MAY edit wp-config directives and install/update/remove whole plugins or themes via wp_cli (config and the plugin set legitimately differ per environment). ALWAYS confirm DESTRUCTIVE server ops with the user first: deleting ACF or another critical plugin, or changing security/DB config.';
         } elseif ($cli) {
             $r[] = 'Server ops (wp-config directives, plugin/theme install/update/delete) are DISABLED for this user — those commands are blocked; ask the site admin to grant "Server ops" to this user\'s role in Simple MCP settings if one is genuinely needed.';
         }
         if ($blocks) {
             $r[] = 'Page content is ACF-block data stored INLINE in post_content — never hand-write block-delimiter JSON; use block_get / list_block_fields / block_update.';
         }
-        $r[] = 'acf_update handles POST/user/term/OPTIONS ACF fields' . ($blocks ? ' but NOT fields inside blocks (use block_update for those).' : '.');
+        $r[] = 'acf_update handles POST/user/term/comment/OPTIONS ACF fields' . ($blocks ? ' but NOT fields inside blocks (use block_update for those).' : '.');
         if ($ml) {
             $r[] = 'This site is multilingual (' . $ml . '): each language is a SEPARATE post/term ID linked by a trid — resolve the right one with wploc_get_translations before editing.';
         }
         if ($content) {
-            $r[] = 'On an unfamiliar site call describe_site first to learn its blocks, fields, options, post types and languages (they differ per site).';
+            $r[] = 'On an unfamiliar site call describe_site first to learn its blocks, fields, options, post types and languages (they differ per site); pass refresh:true after schema or theme changes because the result is cached for one hour.';
         }
-        $r[] = 'All content writes auto-create a revision and byte-verify (check content_verified:true). After edits, flush cache if a page cache is active.';
+        $r[] = 'Direct typed post_content edits are byte-verified (when content_verified is returned, require true); updates preserve a revision or fallback backup where supported. ACF, media and translation writes use their own result fields. After edits, flush cache if a page cache is active.';
         if ($cli) {
             $r[] = 'Prefer typed tools over raw wp_cli. When you do call wp_cli, pass argument values literally and quoted and NEVER JSON-encode text — non-ASCII gets \uXXXX-escaped and is stored verbatim (a Cyrillic title would be saved as the literal escape text, not the letters); for any write carrying human text (titles, excerpts, field values) use update_post / create_post / acf_update. Flush page cache via wp_cli "cache flush" plus the W3 Total Cache flush when W3TC is active.';
         }

@@ -43,7 +43,7 @@ class Simple_MCP_Tools {
     static function core_defs() {
         return [
             'wp_cli' => [
-                'description' => 'Run any WP-CLI command server-side (omit the leading "wp"; --path is added automatically). Returns stdout/stderr/exit_code. Destructive subcommands are deny-listed and shell metacharacters/chaining are blocked. SCOPE: this MCP is for CONTENT, options, media, taxonomies and translations — NOT code. Do NOT install/activate/update/edit plugins, themes, or files here: theme & plugin code is managed locally via git + CI/CD, so server-side code changes drift from git and are overwritten on the next deploy. For content edits prefer the typed tools (block_*, acf_*, wploc_*, create_post, upload_media) over raw wp_cli. ARGUMENT QUOTING: the command is tokenized shell-style (quotes respected) then executed without a shell (argv), so pass text values literally and quoted, e.g. post update 12 --post_title="My Title". NEVER JSON-encode a value: JSON escapes non-ASCII to \uXXXX and that raw \uXXXX text is then saved verbatim (a Cyrillic title would appear in the DB as the raw text backslash-u-0417 backslash-u-0430 ... instead of the real letters). For any write that carries human text (titles, excerpts, field values) use the typed tools update_post / create_post / acf_update instead of wp_cli.',
+                'description' => 'Run any WP-CLI command server-side (omit the leading "wp"; --path is added automatically). Returns stdout/stderr/exit_code. This is a separate privileged subprocess: it does NOT inherit the authenticated HTTP user\'s object-level capability checks and is therefore exposed only to manage_options roles. Destructive subcommands are deny-listed and shell metacharacters/chaining are blocked. SCOPE: this MCP is primarily for CONTENT, options, media, taxonomies and translations. Never edit PHP/JS/CSS or other theme/plugin source files here: source is managed via git and server-side edits drift. Plugin/theme install, update and delete operations plus wp-config writes are server ops and require the separate Server ops permission; always confirm destructive ones. For content edits prefer the typed tools (block_*, acf_*, wploc_*, create_post, upload_media) over raw wp_cli. ARGUMENT QUOTING: the command is tokenized shell-style (quotes respected) then executed without a shell (argv), so pass text values literally and quoted, e.g. post update 12 --post_title="My Title". NEVER JSON-encode a value: JSON escapes non-ASCII to \uXXXX and that raw \uXXXX text is then saved verbatim (a Cyrillic title would appear in the DB as the raw text backslash-u-0417 backslash-u-0430 ... instead of the real letters). For any write that carries human text (titles, excerpts, field values) use the typed tools update_post / create_post / acf_update instead of wp_cli.',
                 'inputSchema' => [
                     'type'       => 'object',
                     'properties' => [
@@ -65,14 +65,14 @@ class Simple_MCP_Tools {
             ],
 
             'update_post' => [
-                'description' => 'Update a post safely. content (FULL Gutenberg block markup) is saved with an auto-revision + wp_slash + byte-for-byte verify (content_verified), so it never corrupts block-delimiter \\uXXXX JSON. Use for full-body replacement or title/status. To change ONE ACF field inside a block, prefer block_update (targeted — no need to resend the whole body).',
+                'description' => 'Update a post safely. content (FULL Gutenberg block markup) is saved with a requested WP revision + wp_slash + byte-for-byte verify (content_verified), so it never corrupts block-delimiter \\uXXXX JSON. Use for full-body replacement or title/status. To change ONE ACF field inside a block, prefer block_update (targeted — no need to resend the whole body).',
                 'inputSchema' => [
                     'type'       => 'object',
                     'properties' => [
                         'id'      => ['type' => 'integer'],
                         'content' => ['type' => 'string', 'description' => 'Full post_content (Gutenberg markup). Optional. To edit a single block field use block_update instead.'],
                         'title'   => ['type' => 'string'],
-                        'status'  => ['type' => 'string', 'description' => 'publish | draft | pending | private'],
+                        'status'  => ['type' => 'string', 'description' => 'publish | draft | pending | private | future | trash'],
                     ],
                     'required'   => ['id'],
                 ],
@@ -125,7 +125,7 @@ class Simple_MCP_Tools {
             ],
 
             'upload_begin' => [
-                'description' => 'Begin a chunked upload of a large file. Returns upload_id. Then send parts with upload_chunk and finish with upload_finish (which runs the theme resize+webp pipeline).',
+                'description' => 'Begin a chunked upload of a large file. Returns upload_id valid for one hour. Then send parts with upload_chunk and finish with upload_finish (which runs the theme resize+webp pipeline). The assembled file is limited to 1 GB.',
                 'inputSchema' => [
                     'type'       => 'object',
                     'properties' => ['filename' => ['type' => 'string']],

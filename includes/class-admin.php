@@ -230,7 +230,7 @@ class Simple_MCP_Admin {
                     <tr>
                         <th scope="row">IP-allowlist</th>
                         <td><textarea name="ip_allowlist" rows="3" class="large-text code"><?php echo esc_textarea(implode("\n", (array) $o['ip_allowlist'])); ?></textarea>
-                            <p class="description">Порожньо = будь-який IP. Підтримується IP або CIDR (напр. <code>203.0.113.0/24</code>). Довіряємо лише REMOTE_ADDR.</p></td>
+                            <p class="description">Порожньо = будь-який IP. Підтримується точний IPv4/IPv6 або IPv4 CIDR (напр. <code>203.0.113.0/24</code>). Довіряємо лише REMOTE_ADDR.</p></td>
                     </tr>
                     <tr>
                         <th scope="row">Ліміт запитів</th>

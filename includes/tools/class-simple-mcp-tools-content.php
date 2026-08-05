@@ -15,7 +15,7 @@ class Simple_MCP_Tools_Content {
                     'properties' => [
                         'post_type'  => ['type' => 'string'],
                         'title'      => ['type' => 'string'],
-                        'status'     => ['type' => 'string', 'description' => 'draft|publish|pending|private (default draft)'],
+                        'status'     => ['type' => 'string', 'description' => 'draft|publish|pending|private|future (default draft)'],
                         'content'    => ['type' => 'string'],
                         'slug'       => ['type' => 'string'],
                         'excerpt'    => ['type' => 'string'],
