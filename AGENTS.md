@@ -58,7 +58,7 @@ Confirm destructive ones with the user.
 
 ## Release/documentation sync
 
-Current release: **2.2.0**. Canonical author URL: **https://kaplia.pro/**. For a release, keep
+Current release: **2.3.0**. Canonical author URL: **https://kaplia.pro/**. For a release, keep
 the `Version:` header and `SIMPLE_MCP_VERSION` in `simple-mcp.php` identical; also update the
 README changelog and the updater's WordPress-visible changelog. The updater reads the header,
 while runtime migrations and MCP `serverInfo` use the constant.
