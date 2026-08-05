@@ -75,6 +75,13 @@ claude mcp add --transport http simple-mcp https://САЙТ/simple-mcp \
 Готова команда з реальним ключем показується при генерації в профілі.
 Для локалки без HTTPS додай у `wp-config.php`: `define('SIMPLE_MCP_ALLOW_INSECURE', true);`
 
+> **Тільки локальний клієнт (Claude Code CLI).** Плагін автентифікується статичним
+> Bearer-ключем і **не** реалізує OAuth-сервер, тож хмарний веб-інтерфейс claude.ai
+> (**Settings → Connectors → Add custom connector**) підключити його **не може** — той
+> потік очікує OAuth. Локальний сайт (`*.test`/`localhost`) з хмари теж недоступний.
+> Використовуй **Claude Code** на машині, що бачить сайт; для віддалених інсталяцій —
+> публічний HTTPS-домен. Перевірка: `claude mcp list` → `simple-mcp: ✓ Connected`.
+
 Основний спосіб автентифікації — `Authorization: Bearer …`. Якщо проксі/FPM зрізає
 `Authorization`, підтримується запасний заголовок `X-Simple-MCP-Key: ВАШ_КЛЮЧ`.
 
@@ -140,8 +147,9 @@ claude mcp add --transport http simple-mcp https://САЙТ/simple-mcp \
 - **Блоки**, **Контент і дискавері** — за потреби.
 - **Мультимовність** — з **авто-детектом**: якщо WP-LOC/WPML нема — група прихована для всіх.
 
-Дефолти дзеркальні: administrator — усе (server ops off), editor — контент+блоки+переклади,
-author — лише ядро (нативні caps обмежують його своїми постами), решта — off.
+Дефолти дзеркальні: administrator — усе (server ops off); editor — ядро контенту + блоки +
+мультимовність + контент і дискавері (усе, крім `wp_cli` і серверних операцій); author —
+лише ядро (нативні caps обмежують його своїми постами); решта (включно з кастомними) — off.
 
 ## Безпека
 

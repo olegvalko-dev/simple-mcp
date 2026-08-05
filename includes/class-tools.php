@@ -80,7 +80,7 @@ class Simple_MCP_Tools {
             ],
 
             'acf_get' => [
-                'description' => 'Read ACF field value(s) from POST META (also user_/term_/options). post_id is an int or an ACF selector ("option", "options_uk", "user_5", "term_10"). Omit field to get all. NOTE: does NOT read ACF fields embedded in Gutenberg blocks (those live inline in post_content) — use block_get for those.',
+                'description' => 'Read ACF field value(s) from POST META (also user_/term_/comment_/options). post_id is an int or an ACF selector ("option", "options_uk", "user_5", "term_10", "comment_5"). Omit field to get all. NOTE: does NOT read ACF fields embedded in Gutenberg blocks (those live inline in post_content) — use block_get for those.',
                 'inputSchema' => [
                     'type'       => 'object',
                     'properties' => [
@@ -93,7 +93,7 @@ class Simple_MCP_Tools {
             ],
 
             'acf_update' => [
-                'description' => 'Write an ACF field via native update_field() — correct for repeaters/flex/group. Works for POST fields, user_/term_, and OPTIONS pages (post_id "option", or "options_{wpml_code}" for a per-language value). CANNOT edit ACF fields inside Gutenberg blocks (their data is inline in post_content, not post meta) — use block_update for those. Note: this fills VALUES only; field DEFINITIONS (acf-json) are managed in theme code locally, not here.',
+                'description' => 'Write an ACF field via native update_field() — correct for repeaters/flex/group. Works for POST fields, user_/term_/comment_, and OPTIONS pages (post_id "option", or "options_{wpml_code}" for a per-language value). CANNOT edit ACF fields inside Gutenberg blocks (their data is inline in post_content, not post meta) — use block_update for those. Note: this fills VALUES only; field DEFINITIONS (acf-json) are managed in theme code locally, not here.',
                 'inputSchema' => [
                     'type'       => 'object',
                     'properties' => [
