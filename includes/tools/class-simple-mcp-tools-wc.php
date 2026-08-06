@@ -23,7 +23,7 @@ class Simple_MCP_Tools_WC {
             ],
             'wc_synced_meta_keys' => [
                 'description' => 'List the product meta keys that wp-loc-woocommerce mirrors from the default-language product to its translations. NEVER edit these keys per-language on a translation — the next sync overwrites them; edit the SOURCE product and run wc_sync_product instead. Anything not listed (title, description, ACF text fields) is per-language and safe to translate.',
-                'inputSchema' => ['type' => 'object', 'additionalProperties' => false, 'properties' => []],
+                'inputSchema' => ['type' => 'object', 'additionalProperties' => false, 'properties' => (object) []],
                 'callback' => [__CLASS__, 'synced_meta_keys'],
             ],
         ];

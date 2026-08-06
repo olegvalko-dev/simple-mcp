@@ -18,7 +18,7 @@ class Simple_MCP_Tools_MC {
         return [
             'mc_get_config' => [
                 'description' => 'Read the multi-currency configuration: enabled flag, mode ("language" = currency follows the site language, "switcher" = customer picks via cookie), base currency (WooCommerce\'s own — always rate 1.0), configured currencies with their rates/rounding/decimals, the language→currency map (keys are wp-loc language SLUGS), and the switcher default. Rates mean: 1 unit of base currency = rate units of target. enabled:false means the engine is dormant (prices show in base currency) but config edits still persist.',
-                'inputSchema' => ['type' => 'object', 'additionalProperties' => false, 'properties' => []],
+                'inputSchema' => ['type' => 'object', 'additionalProperties' => false, 'properties' => (object) []],
                 'callback' => [__CLASS__, 'get_config'],
             ],
             'mc_set_rate' => [
