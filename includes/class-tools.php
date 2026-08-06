@@ -168,10 +168,16 @@ class Simple_MCP_Tools {
     static function list_public() {
         $out = [];
         foreach (self::registry() as $name => $def) {
+            $schema = $def['inputSchema'];
+            // JSON Schema вимагає, щоб "properties" був об'єктом. Порожній PHP-масив
+            // json_encode віддає як [], і клієнт відкидає ВЕСЬ список інструментів.
+            if (isset($schema['properties']) && [] === $schema['properties']) {
+                $schema['properties'] = (object) [];
+            }
             $out[] = [
                 'name'        => $name,
                 'description' => $def['description'],
-                'inputSchema' => $def['inputSchema'],
+                'inputSchema' => $schema,
             ];
         }
         return $out;
