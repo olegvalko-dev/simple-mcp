@@ -12,10 +12,16 @@ if (!defined('ABSPATH')) exit;
 
 class Simple_MCP_Tools {
 
-    /** Full registry = core tools + enabled tool-module defs. Disabled groups are hidden entirely. */
+    /**
+     * Full registry for the CURRENT authenticated user = core tools + tool-module defs
+     * the user's role permissions allow. Groups a role can't use are hidden entirely
+     * (absent from tools/list, uncallable). Outside an authenticated MCP request the
+     * permission set is all-false, so the registry is empty.
+     */
     static function registry() {
+        if (!Simple_MCP_Auth::perm('mcp')) return [];
         $reg = self::core_defs();
-        if (!Simple_MCP::module_on('wp_cli')) unset($reg['wp_cli']); // typed-only mode
+        if (!Simple_MCP_Auth::perm('wp_cli')) unset($reg['wp_cli']); // typed-only for this user
 
         $modules = [
             'Simple_MCP_Tools_Blocks'   => 'blocks',
@@ -27,7 +33,7 @@ class Simple_MCP_Tools {
             'Simple_MCP_Tools_SEO'      => 'seo',
         ];
         foreach ($modules as $cls => $group) {
-            if (!Simple_MCP::module_on($group)) continue;
+            if (!Simple_MCP_Auth::perm($group)) continue;
             if ($group === 'wploc' && !Simple_MCP::multilingual_system()) continue; // no wp-loc/WPML → hide
             if ($group === 'wc' && !class_exists('WP_LOC_WC')) continue;            // no wp-loc-woocommerce → hide
             if ($group === 'mc' && !class_exists('WP_LOC_MC')) continue;            // no wp-loc-multicurrency → hide
@@ -43,7 +49,7 @@ class Simple_MCP_Tools {
     static function core_defs() {
         return [
             'wp_cli' => [
-                'description' => 'Run any WP-CLI command server-side (omit the leading "wp"; --path is added automatically). Returns stdout/stderr/exit_code. Destructive subcommands are deny-listed and shell metacharacters/chaining are blocked. SCOPE: this MCP is for CONTENT, options, media, taxonomies and translations — NOT code. Do NOT install/activate/update/edit plugins, themes, or files here: theme & plugin code is managed locally via git + CI/CD, so server-side code changes drift from git and are overwritten on the next deploy. For content edits prefer the typed tools (block_*, acf_*, wploc_*, create_post, upload_media) over raw wp_cli. ARGUMENT QUOTING: the command is tokenized shell-style (quotes respected) then executed without a shell (argv), so pass text values literally and quoted, e.g. post update 12 --post_title="My Title". NEVER JSON-encode a value: JSON escapes non-ASCII to \uXXXX and that raw \uXXXX text is then saved verbatim (a Cyrillic title would appear in the DB as the raw text backslash-u-0417 backslash-u-0430 ... instead of the real letters). For any write that carries human text (titles, excerpts, field values) use the typed tools update_post / create_post / acf_update instead of wp_cli.',
+                'description' => 'Run any WP-CLI command server-side (omit the leading "wp"; --path is added automatically). Returns stdout/stderr/exit_code. This is a separate privileged subprocess: it does NOT inherit the authenticated HTTP user\'s object-level capability checks and is therefore exposed only to manage_options roles. Destructive subcommands are deny-listed and shell metacharacters/chaining are blocked. SCOPE: this MCP is primarily for CONTENT, options, media, taxonomies and translations. Never edit PHP/JS/CSS or other theme/plugin source files here: source is managed via git and server-side edits drift. Plugin/theme install, update and delete operations plus wp-config writes are server ops and require the separate Server ops permission; always confirm destructive ones. For content edits prefer the typed tools (block_*, acf_*, wploc_*, create_post, upload_media) over raw wp_cli. ARGUMENT QUOTING: the command is tokenized shell-style (quotes respected) then executed without a shell (argv), so pass text values literally and quoted, e.g. post update 12 --post_title="My Title". NEVER JSON-encode a value: JSON escapes non-ASCII to \uXXXX and that raw \uXXXX text is then saved verbatim (a Cyrillic title would appear in the DB as the raw text backslash-u-0417 backslash-u-0430 ... instead of the real letters). For any write that carries human text (titles, excerpts, field values) use the typed tools update_post / create_post / acf_update instead of wp_cli.',
                 'inputSchema' => [
                     'type'       => 'object',
                     'properties' => [
@@ -65,14 +71,14 @@ class Simple_MCP_Tools {
             ],
 
             'update_post' => [
-                'description' => 'Update a post safely. content (FULL Gutenberg block markup) is saved with an auto-revision + wp_slash + byte-for-byte verify (content_verified), so it never corrupts block-delimiter \\uXXXX JSON. Use for full-body replacement or title/status. To change ONE ACF field inside a block, prefer block_update (targeted — no need to resend the whole body).',
+                'description' => 'Update a post safely. content (FULL Gutenberg block markup) is saved with a requested WP revision + wp_slash + byte-for-byte verify (content_verified), so it never corrupts block-delimiter \\uXXXX JSON. Use for full-body replacement or title/status. To change ONE ACF field inside a block, prefer block_update (targeted — no need to resend the whole body).',
                 'inputSchema' => [
                     'type'       => 'object',
                     'properties' => [
                         'id'      => ['type' => 'integer'],
                         'content' => ['type' => 'string', 'description' => 'Full post_content (Gutenberg markup). Optional. To edit a single block field use block_update instead.'],
                         'title'   => ['type' => 'string'],
-                        'status'  => ['type' => 'string', 'description' => 'publish | draft | pending | private'],
+                        'status'  => ['type' => 'string', 'description' => 'publish | draft | pending | private | future | trash'],
                     ],
                     'required'   => ['id'],
                 ],
@@ -80,7 +86,7 @@ class Simple_MCP_Tools {
             ],
 
             'acf_get' => [
-                'description' => 'Read ACF field value(s) from POST META (also user_/term_/options). post_id is an int or an ACF selector ("option", "options_uk", "user_5", "term_10"). Omit field to get all. NOTE: does NOT read ACF fields embedded in Gutenberg blocks (those live inline in post_content) — use block_get for those.',
+                'description' => 'Read ACF field value(s) from POST META (also user_/term_/comment_/options). post_id is an int or an ACF selector ("option", "options_uk", "user_5", "term_10", "comment_5"). Omit field to get all. NOTE: does NOT read ACF fields embedded in Gutenberg blocks (those live inline in post_content) — use block_get for those.',
                 'inputSchema' => [
                     'type'       => 'object',
                     'properties' => [
@@ -93,7 +99,7 @@ class Simple_MCP_Tools {
             ],
 
             'acf_update' => [
-                'description' => 'Write an ACF field via native update_field() — correct for repeaters/flex/group. Works for POST fields, user_/term_, and OPTIONS pages (post_id "option", or "options_{wpml_code}" for a per-language value). CANNOT edit ACF fields inside Gutenberg blocks (their data is inline in post_content, not post meta) — use block_update for those. Note: this fills VALUES only; field DEFINITIONS (acf-json) are managed in theme code locally, not here.',
+                'description' => 'Write an ACF field via native update_field() — correct for repeaters/flex/group. Works for POST fields, user_/term_/comment_, and OPTIONS pages (post_id "option", or "options_{wpml_code}" for a per-language value). CANNOT edit ACF fields inside Gutenberg blocks (their data is inline in post_content, not post meta) — use block_update for those. Note: this fills VALUES only; field DEFINITIONS (acf-json) are managed in theme code locally, not here.',
                 'inputSchema' => [
                     'type'       => 'object',
                     'properties' => [
@@ -125,7 +131,7 @@ class Simple_MCP_Tools {
             ],
 
             'upload_begin' => [
-                'description' => 'Begin a chunked upload of a large file. Returns upload_id. Then send parts with upload_chunk and finish with upload_finish (which runs the theme resize+webp pipeline).',
+                'description' => 'Begin a chunked upload of a large file. Returns upload_id valid for one hour. Then send parts with upload_chunk and finish with upload_finish (which runs the theme resize+webp pipeline). The assembled file is limited to 1 GB.',
                 'inputSchema' => [
                     'type'       => 'object',
                     'properties' => ['filename' => ['type' => 'string']],
@@ -210,6 +216,90 @@ class Simple_MCP_Tools {
         return ['content' => [['type' => 'text', 'text' => (string) $msg]], 'isError' => true];
     }
 
+    // ── Нативні capability-перевірки (дзеркало прав WordPress) ────────────
+
+    /** Уніфікована відмова: агенту одразу видно, що це нативні права WP, а не збій. */
+    static function err_cap($action) {
+        $u = wp_get_current_user();
+        return self::err('Відмовлено: у користувача "' . ($u ? $u->user_login : '?')
+            . '" немає WordPress-права на цю дію (' . $action . '). '
+            . 'MCP дзеркалить нативні ролі WordPress — попроси адміністратора розширити роль, якщо це потрібно.');
+    }
+
+    /** Чи можна ЧИТАТИ пост: опублікований — так; чернетки/приватні — лише кому дозволено редагувати. */
+    static function can_read_post($post) {
+        $post = get_post($post);
+        if (!$post) return false;
+        // Вкладення мають статус 'inherit' — читабельність визначає батьківський пост
+        // (осиротіле вкладення — публічний медіа-асет, читається вільно).
+        if ($post->post_type === 'attachment') {
+            $parent = $post->post_parent ? get_post($post->post_parent) : null;
+            return $parent ? self::can_read_post($parent) : true;
+        }
+        if ($post->post_status === 'publish') return true;
+        return current_user_can('edit_post', $post->ID);
+    }
+
+    /** Чи можна РЕДАГУВАТИ пост (нативний meta-cap edit_post: автор — лише свої). */
+    static function can_edit_post($post_id) {
+        return current_user_can('edit_post', $post_id);
+    }
+
+    /** Статуси, що вимагають права публікації (мірор нативного WP: publish/private/future). */
+    static function is_publish_status($status) {
+        return in_array($status, ['publish', 'private', 'future'], true);
+    }
+
+    /** Чи може користувач публікувати пости цього типу (для переходу в publish/private/future). */
+    static function can_publish_type($post_type) {
+        $pto = get_post_type_object($post_type);
+        $cap = $pto && !empty($pto->cap->publish_posts) ? $pto->cap->publish_posts : 'publish_posts';
+        return current_user_can($cap);
+    }
+
+    /**
+     * Розбір ACF-селектора post_id: int → post, "option"/"options"/"options_*" → опції,
+     * "user_5" → користувач, "term_10" → терм, "comment_5" → коментар.
+     * type 'other' — селектор, який ми не вміємо cap-перевіряти (обробляється як помилка входу,
+     * а не як відмова в правах). Повертає ['type', 'id'].
+     */
+    static function acf_target($post_id) {
+        if (is_numeric($post_id)) return ['type' => 'post', 'id' => (int) $post_id];
+        $s = (string) $post_id;
+        if ($s === 'option' || $s === 'options' || strpos($s, 'options_') === 0) return ['type' => 'option', 'id' => null];
+        if (preg_match('/^user_(\d+)$/', $s, $m))    return ['type' => 'user', 'id' => (int) $m[1]];
+        if (preg_match('/^term_(\d+)$/', $s, $m))    return ['type' => 'term', 'id' => (int) $m[1]];
+        if (preg_match('/^comment_(\d+)$/', $s, $m)) return ['type' => 'comment', 'id' => (int) $m[1]];
+        return ['type' => 'other', 'id' => null];
+    }
+
+    /**
+     * Cap-перевірка ACF-цілі. $write=false — читання, true — запис.
+     * Повертає true (дозволено) або рядок-назву відсутнього права (для err_cap).
+     * Для type 'other' повертає true — небезпеку відсіює caller через plain-err ще до виклику.
+     */
+    static function acf_cap_check($target, $write) {
+        switch ($target['type']) {
+            case 'post':
+                if ($write) return self::can_edit_post($target['id']) ?: 'edit_post #' . $target['id'];
+                return self::can_read_post($target['id']) ?: 'read post #' . $target['id'];
+            case 'option':
+                // Опції — глобальні налаштування сайту: запис лише manage_options,
+                // читання — будь-кому, хто може редагувати контент (вони й так рендеряться публічно).
+                if ($write) return current_user_can('manage_options') ?: 'manage_options';
+                return current_user_can('edit_posts') ?: 'edit_posts';
+            case 'user':
+                if (!$write && get_current_user_id() === $target['id']) return true;
+                return current_user_can('edit_user', $target['id']) ?: 'edit_user #' . $target['id'];
+            case 'term':
+                if ($write) return current_user_can('edit_term', $target['id']) ?: 'edit_term #' . $target['id'];
+                return true; // терми публічних таксономій читаються вільно
+            case 'comment':
+                return current_user_can('moderate_comments') ?: 'moderate_comments';
+        }
+        return true; // 'other' — валідність селектора перевіряє caller
+    }
+
     /**
      * Безпечний запис post_content: авто-ревізія (для відкату) → wp_slash (щоб не побити
      * блоковий \uXXXX JSON) → byte-for-byte verify. Спільний для update_post і block-toolset.
@@ -231,8 +321,8 @@ class Simple_MCP_Tools {
     // ── Інструменти ───────────────────────────────────────────────────────
 
     static function tool_wp_cli($args) {
-        if (!Simple_MCP::opt('wp_cli_enabled', true)) {
-            return self::err('Інструмент wp_cli вимкнено в налаштуваннях');
+        if (!Simple_MCP_Auth::perm('wp_cli')) {
+            return self::err('Інструмент wp_cli недоступний для ролі цього користувача');
         }
         $command = trim((string) ($args['command'] ?? ''));
         if ($command === '') return self::err('Порожня команда');
@@ -265,9 +355,9 @@ class Simple_MCP_Tools {
         $subcmd = strtolower(implode(' ', $positional));
 
         // Server ops (wp-config directives + plugin/theme install/update/delete) are environment-
-        // specific changes, not content. Off by default; enable "Server ops" per-site to allow.
+        // specific changes, not content. Off by default; granted per-role in the roles matrix.
         // The AI must still CONFIRM destructive ones (deleting ACF/critical plugins, security/DB config).
-        if (!Simple_MCP::opt('allow_server_ops', false)) {
+        if (!Simple_MCP_Auth::perm('server_ops')) {
             $ops = ['config set', 'config delete', 'config edit', 'config create', 'config shuffle-salts',
                     'plugin install', 'plugin update', 'plugin delete',
                     'theme install', 'theme update', 'theme delete'];
@@ -341,6 +431,7 @@ class Simple_MCP_Tools {
         $id = intval($args['id'] ?? 0);
         $p  = $id ? get_post($id) : null;
         if (!$p) return self::err('Пост не знайдено');
+        if (!self::can_read_post($p)) return self::err_cap('читання неопублікованого поста #' . $id);
         return self::ok([
             'id'       => $p->ID,
             'title'    => $p->post_title,
@@ -354,11 +445,27 @@ class Simple_MCP_Tools {
 
     static function tool_update_post($args) {
         $id = intval($args['id'] ?? 0);
-        if (!$id || !get_post($id)) return self::err('Пост не знайдено');
+        $post = $id ? get_post($id) : null;
+        if (!$post) return self::err('Пост не знайдено');
+        if (!self::can_edit_post($id)) return self::err_cap('edit_post #' . $id);
 
         $postarr = ['ID' => $id];
         if (isset($args['title']))  $postarr['post_title']  = wp_slash(sanitize_text_field((string) $args['title']));
-        if (isset($args['status'])) $postarr['post_status'] = sanitize_key((string) $args['status']);
+        if (isset($args['status'])) {
+            $new_status = sanitize_key((string) $args['status']);
+            // Публікація/приватність/планування — окреме нативне право (author може, contributor — ні).
+            // 'future' теж потребує publish_posts: інакше через планування пост опублікується по cron.
+            if (self::is_publish_status($new_status)
+                && !self::is_publish_status($post->post_status)
+                && !self::can_publish_type($post->post_type)) {
+                return self::err_cap('publish_posts (' . $post->post_type . ')');
+            }
+            // Кошик — нативний meta-cap delete_post (edit_others не дає права видаляти чужі пости)
+            if ($new_status === 'trash' && !current_user_can('delete_post', $id)) {
+                return self::err_cap('delete_post #' . $id);
+            }
+            $postarr['post_status'] = $new_status;
+        }
         $has_content = array_key_exists('content', $args);
         if ($has_content) {
             // КЛЮЧОВЕ: wp_slash, бо wp_update_post усередині робить wp_unslash і побив би \uXXXX / блокові делімітери.
@@ -380,7 +487,11 @@ class Simple_MCP_Tools {
 
     static function tool_acf_get($args) {
         if (!function_exists('get_field')) return self::err('ACF не активний');
-        $post_id = $args['post_id'] ?? 0; // може бути int або "option"/"user_X"/"term_X"
+        $post_id = $args['post_id'] ?? 0; // може бути int або "option"/"user_X"/"term_X"/"comment_X"
+        $target  = self::acf_target($post_id);
+        if ($target['type'] === 'other') return self::err('Непідтримуваний селектор post_id: "' . $post_id . '". Підтримуються: число (пост), "option"/"options_{lang}", "user_{id}", "term_{id}", "comment_{id}".');
+        $cap = self::acf_cap_check($target, false);
+        if ($cap !== true) return self::err_cap((string) $cap);
         $field   = isset($args['field']) ? (string) $args['field'] : '';
         if ($field !== '') {
             return self::ok(['field' => $field, 'value' => get_field($field, $post_id)]);
@@ -396,6 +507,10 @@ class Simple_MCP_Tools {
     static function tool_acf_update($args) {
         if (!function_exists('update_field')) return self::err('ACF не активний');
         $post_id = $args['post_id'] ?? 0;
+        $target  = self::acf_target($post_id);
+        if ($target['type'] === 'other') return self::err('Непідтримуваний селектор post_id: "' . $post_id . '". Підтримуються: число (пост), "option"/"options_{lang}", "user_{id}", "term_{id}", "comment_{id}".');
+        $cap = self::acf_cap_check($target, true);
+        if ($cap !== true) return self::err_cap((string) $cap);
         $field   = (string) ($args['field'] ?? '');
         if ($field === '') return self::err("Потрібне поле (ім'я або field_key)");
         if (!array_key_exists('value', $args)) return self::err('Потрібне value');
@@ -404,6 +519,7 @@ class Simple_MCP_Tools {
     }
 
     static function tool_upload_media($args) {
+        if (!current_user_can('upload_files')) return self::err_cap('upload_files');
         self::ensure_media_includes();
         $filename = sanitize_file_name((string) ($args['filename'] ?? ''));
         if ($filename === '') return self::err('Потрібне filename');
@@ -431,6 +547,7 @@ class Simple_MCP_Tools {
     }
 
     static function tool_upload_begin($args) {
+        if (!current_user_can('upload_files')) return self::err_cap('upload_files');
         $filename = sanitize_file_name((string) ($args['filename'] ?? ''));
         if ($filename === '') return self::err('Потрібне filename');
         $dir = self::tmp_dir();
@@ -458,6 +575,7 @@ class Simple_MCP_Tools {
     }
 
     static function tool_upload_finish($args) {
+        if (!current_user_can('upload_files')) return self::err_cap('upload_files');
         self::ensure_media_includes();
         $id   = (string) ($args['upload_id'] ?? '');
         $meta = $id ? get_transient('simple_mcp_up_' . $id) : false;
@@ -498,6 +616,10 @@ class Simple_MCP_Tools {
     static function sideload_and_respond($tmp, $filename, $args) {
         $file_array = ['name' => $filename, 'tmp_name' => $tmp];
         $post_id    = intval($args['post_id'] ?? 0);
+        if ($post_id && !self::can_edit_post($post_id)) {
+            @unlink($tmp);
+            return self::err_cap('edit_post #' . $post_id . ' (прикріплення медіа до поста)');
+        }
         $title      = isset($args['title']) ? sanitize_text_field((string) $args['title']) : null;
 
         // media_handle_sideload → wp_handle_upload (з контекстом 'sideload') → тема ресайзить + робить webp

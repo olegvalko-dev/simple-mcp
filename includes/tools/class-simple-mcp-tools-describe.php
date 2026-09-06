@@ -17,7 +17,7 @@ class Simple_MCP_Tools_Describe {
     static function defs() {
         return [
             'describe_site' => [
-                'description' => 'Return this site/fork\'s content schema in one call: acf blocks (+field names/types), acf options pages (+fields), public post types & taxonomies (+translatable flags), and the language map (slug<->wpml_code, default). Call this first on an unfamiliar site to learn exactly which blocks/fields/options/languages exist here, instead of guessing. Cached; pass refresh:true to rebuild.',
+                'description' => 'Return this site/fork\'s content schema in one call: acf blocks (+field names/types), acf options pages (+fields), public post types & taxonomies (+translatable flags), and the language map (slug<->wpml_code, default). Call this first on an unfamiliar site to learn exactly which blocks/fields/options/languages exist here, instead of guessing. Cached for one hour; pass refresh:true to rebuild.',
                 'inputSchema' => ['type' => 'object', 'additionalProperties' => false,
                     'properties' => ['refresh' => ['type' => 'boolean']]],
                 'callback' => [__CLASS__, 'describe_site'],

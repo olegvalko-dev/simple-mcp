@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) exit;
 
 class Simple_MCP_GitHub_Updater {
 
-    private const REPOSITORY = 'vitaliikaplia/simple-mcp';
+    private const REPOSITORY = 'olegvalko-dev/simple-mcp';
     private const CACHE_KEY  = 'simple_mcp_github_update_data';
     private const CACHE_TTL  = 12 * HOUR_IN_SECONDS;
 
@@ -73,15 +73,15 @@ class Simple_MCP_GitHub_Updater {
             'name'         => 'Simple MCP',
             'slug'         => $this->get_slug(),
             'version'      => $version,
-            'author'       => '<a href="https://vitaliikaplia.com/">Vitalii Kaplia</a>',
+            'author'       => '<a href="https://kaplia.pro/">Vitalii Kaplia</a>',
             'homepage'     => $this->get_repository_url(),
             'requires'     => '6.0',
             'requires_php' => '8.1',
             'tested'       => get_bloginfo('version'),
             'download_link' => $remote_data['package'] ?? $this->get_package_url(),
             'sections'     => [
-                'description' => '<p>Simple MCP — приватний MCP-сервер для WordPress: власний ендпоінт поза REST API, автентифікація довгим ключем, повний доступ до WP-CLI (з deny-list) та безпечні інструменти для медіа, Gutenberg-блоків і ACF.</p>',
-                'changelog'   => '<p>Оновлення завантажуються з гілки публічного GitHub-репозиторію, коли версія в заголовку плагіна новіша за встановлену.</p>',
+                'description' => '<p>Simple MCP — приватний MCP-сервер для WordPress: власний ендпоінт поза REST API, персональні ключі з дзеркаленням ролей і прав WordPress, WP-CLI для адмінів (deny-list) та безпечні типізовані інструменти для контенту, Gutenberg-блоків, ACF, медіа та мультимовності.</p>',
+                'changelog'   => '<p><strong>2.3.1</strong> — патч: звірено описи інструментів і документацію з реалізацією — селектор <code>comment_</code> додано в описи <code>acf_get</code>/<code>acf_update</code>, вирівняно опис плагіна й дефолти ролей у README, уточнено, що підключення лише через локальний Claude Code CLI (не хмарний конектор claude.ai).</p><p><strong>2.3.0</strong> — технічний minor-реліз; синхронізовано версійний заголовок, runtime-константу й релізні метадані.</p><p><strong>2.2.0</strong> — документацію, MCP instructions, описи tools і підказки адмінки повністю звірено з реалізацією; уточнено модель typed tools/wp_cli, capability-перевірки, верифікацію записів, авторизацію, кеші й release-процес.</p><p><strong>2.1.0</strong> — авторський URL оновлено на kaplia.pro; синхронізовано релізні метадані.</p><p><strong>2.0.0</strong> — персональні ключі замість глобального, матриця «Права ролей», нативні capability-перевірки typed tools, журнал викликів із фільтром/пагінацією/очищенням, admin-only налаштування. Авто-міграція зі старих налаштувань.</p><p>Оновлення завантажуються з гілки публічного GitHub-репозиторію, коли версія в заголовку плагіна новіша за встановлену.</p>',
             ],
         ];
     }

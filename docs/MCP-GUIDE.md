@@ -15,13 +15,26 @@ per fork**, so discover them at runtime (see `describe_site` / `list_block_field
 
 Primary job: **content, options, media, taxonomies, translations**.
 
-- ✅ **Content:** edit page blocks, fill ACF values, upload media, manage terms & CPT items,
-  edit theme options, create/link translations.
-- ❌ **Never edit theme/plugin CODE files** (PHP/JS/CSS) here — that's `git → CI/CD`. Only the
-  **theme** is versioned; editing theme/plugin source on the server drifts and gets overwritten.
+**You act as a specific WordPress user.** Your key is personal: authentication sets that user
+as the current WordPress user (the `initialize` instructions tell you who). Tool groups the role
+isn't granted are absent from `tools/list`; typed operations that touch WordPress objects
+re-check object-level rights
+(an author edits only their own posts, option writes need `manage_options`, publishing needs
+`publish_posts`). A capability-denied error is the system working — don't retry or route around
+it; tell the user which permission is missing. `wp_cli` is the deliberate exception: it runs as
+a separate privileged process without the HTTP user's object-level capability context, so it is
+hard-limited to roles with `manage_options` and must be treated as god-mode.
+
+- ✅ **Content:** edit page blocks, fill ACF values, upload media, manage CPT items, edit theme
+  options and create/link translations. General taxonomy-term CRUD and plain options require
+  `wp_cli`; typed-only users can still edit term ACF values and translation links when permitted.
+- ❌ **Never edit theme/plugin CODE files** (PHP/JS/CSS) here. Site theme code ships through
+  that site's `git → CI/CD`; Simple MCP itself ships from its own GitHub repository/updater.
+  Server-side source edits drift from those sources and get overwritten.
 - ⚙️ **Server ops** — editing **wp-config directives** and **installing / updating / removing
   whole plugins or themes** — are legitimate, *environment-specific* changes (config and the
-  plugin set differ between local and prod by design; only the theme is in git). They are
+  plugin set differ between local and prod by design; site themes and Simple MCP have separate
+  versioned sources). They are
   **off by default**, gated by the **"Server ops"** toggle. When enabled you may do them via
   `wp_cli`, but **always confirm DESTRUCTIVE ops** with the user first — deleting ACF or another
   critical plugin, or changing security/DB config. When disabled, those commands are blocked.
@@ -34,18 +47,23 @@ Primary job: **content, options, media, taxonomies, translations**.
    editing `post_content` for ACF blocks corrupts the `\uXXXX` escapes and the
    `_name → field_key` mirror (this has broken pages before). The `block_*` tools serialize
    server-side and byte-verify.
-2. **Every write is verified.** `update_post`/`block_*`/`create_post` return
-   `content_verified: true` and auto-save a **revision** first (built-in rollback). If
-   `content_verified` is not `true`, stop and investigate.
-3. **Discover before you edit an unfamiliar site.** Call `describe_site` once to learn the
-   blocks, fields, options pages, post types, taxonomies and languages of *this* fork.
-   Call `list_block_fields <block>` for a block's exact field schema before `block_update`.
+2. **Direct typed `post_content` edits are byte-verified.** `update_post` and `block_*` return
+   `content_verified`; `create_post` does so when `content` was supplied. If that field is
+   returned and is not `true`, stop and investigate. Updates preserve a rollback point where
+   supported: block tools create a WP revision, or `_simple_mcp_backup` when revisions are off;
+   `update_post` requests a WP revision. ACF/media/translation writes use their own result fields
+   and do not claim `content_verified`.
+3. **Discover before you edit an unfamiliar site.** If available, call `describe_site` once to
+   learn the blocks, fields, options pages, post types, taxonomies and languages of *this* fork;
+   it is cached for one hour, so pass `refresh:true` after schema/theme changes. Call
+   `list_block_fields <block>` for a block's exact field schema before `block_update`.
 4. **Multilingual = separate entities.** Each language is a **different post/term ID** linked
    by a `trid`. Resolve the right-language ID with `wploc_get_translations` **before** editing.
    Editing "the page" edits only one language.
 5. **Flush cache after content edits** if a full-page cache (e.g. W3 Total Cache) is active,
-   or the front-end will look unchanged: `wp_cli` → `cache flush` and the page-cache flush
-   (`w3-total-cache flush all` when W3TC is present).
+   or the front-end will look unchanged. When `wp_cli` is available, run `cache flush` and the
+   page-cache flush (`w3-total-cache flush all` when W3TC is present); typed-only users must ask
+   an administrator or use the hosting/cache UI.
 6. **Prefer typed tools over `wp_cli`** for content. `wp_cli` is the god-mode backstop; the
    typed tools are safer and self-verifying.
 
@@ -81,7 +99,7 @@ values are stored **inline in `post_content`**, inside the block-delimiter JSON,
 | **Block fields** | inline in `post_content` | `block_get` / `block_update` |
 | **Post/CPT fields** | post meta | `acf_get` / `acf_update` (post_id = int) |
 | **Options pages** (header/footer/theme settings) | `wp_options` | `acf_update` post_id `"option"` (or `"options_{wpml_code}"` per language) |
-| **User / term fields** | user/term meta | `acf_update` post_id `"user_5"` / `"term_10"` |
+| **User / term / comment fields** | corresponding meta | `acf_update` post_id `"user_5"` / `"term_10"` / `"comment_5"` |
 
 ### 2.3 Two options systems (a classic gotcha)
 Theme settings land in `wp_options` from **two** systems with similar-looking keys:
@@ -90,7 +108,9 @@ Theme settings land in `wp_options` from **two** systems with similar-looking ke
   with `wp_cli` `option update <key> <value>`.
 
 `describe_site` lists the **ACF** option pages/fields precisely. Any `wp_option` **not** listed
-there is a plain option — use `wp_cli`. When unsure, `wp_cli` `option get <key>` first.
+there is a plain option — use `wp_cli` when that tool is available. Typed-only users must ask an
+administrator to perform the plain-option change or grant an appropriate tool; when unsure,
+read first with `wp_cli` `option get <key>`.
 
 ### 2.4 Multilingual (wp-loc / WPML)
 - Model: **one post/term per language**, linked by a shared `trid` in `{prefix}icl_translations`.
@@ -109,7 +129,7 @@ there is a plain option — use `wp_cli`. When unsure, `wp_cli` `option get <key
 2. list_block_fields {block_name}           → confirm field name & type (once per block type)
 3. block_update {post_id, locator:{index:N}, set:{field: newValue}}
                                              → check content_verified:true
-4. (if cached) wp_cli "cache flush" (+ W3TC page flush)
+4. (if cached and wp_cli is available) wp_cli "cache flush" (+ W3TC page flush)
 ```
 Value shapes for `set`: scalars as-is; image/file = attachment ID; link = `{title,url,target}`;
 gallery = `[ids]`; repeater = `[{sub:val}, …]`; group = `{sub:val}`;
@@ -130,13 +150,14 @@ render_post {post_id:id}                            → sanity-check the rendere
 ### Upload media (always through the theme pipeline)
 - Small: `upload_media {source:"base64", filename, data}` → returns `attachment_id`, `url`,
   `webp_url` (the theme resized + generated webp).
-- Large (video/hi-res): `upload_begin` → `upload_chunk` × N → `upload_finish`.
+- Large (video/hi-res): `upload_begin` → `upload_chunk` × N → `upload_finish`; an upload session
+  expires after one hour and the assembled file is limited to 1 GB.
 - Then reference the returned `attachment_id` in a block/field via `block_update`/`acf_update`.
 
 ### Theme options
 - ACF option (from `describe_site.acf_options`): `acf_update {post_id:"option", field, value}`;
   per-language: `post_id:"options_uk"`.
-- Plain option: `wp_cli "option update <key> '<value>'"`.
+- Plain option (when `wp_cli` is available): `wp_cli "option update <key> '<value>'"`.
 
 ### Multilingual
 ```
@@ -195,10 +216,11 @@ seo_update_strings {lang:"ru", main:{key:"…"}}   → MERGE: only passed keys c
 
 ## 4. Gotchas that have actually broken things
 
-- **`wp_slash` / `\uXXXX`.** Writing `post_content` without `wp_slash` strips the backslashes
+- **`wp_slash` / `\uXXXX`.** Writing `post_content` through the WordPress PHP API without
+  `wp_slash` strips the backslashes
   from `\uXXXX`, turning `<` into literal `u003c` on the front-end and corrupting the
-  block. All Simple MCP write tools handle this; if you ever fall back to raw `wp post update`,
-  you must `wp_slash`. Prefer the typed tools.
+  block. All Simple MCP typed content tools handle this. Do not send a raw block body through
+  `wp_cli`; prefer the typed tools.
 - **In ACF block JSON, Cyrillic is literal but HTML `< > "` are `\uXXXX`-escaped.** So a naive
   string search for a heading may not match the raw bytes. `block_get`/`block_update` decode
   this for you.
@@ -220,18 +242,18 @@ seo_update_strings {lang:"ru", main:{key:"…"}}   → MERGE: only passed keys c
 
 | Tool | Use |
 |---|---|
-| `describe_site` | Learn this fork: blocks, fields, options, CPTs, taxonomies, languages |
+| `describe_site` | Learn this fork (1h cache; `refresh:true` rebuilds) |
 | `block_get` / `list_block_fields` | Read a page's blocks / a block's field schema |
 | `block_update` | Edit ACF field(s) of one block (safe, verified) |
 | `block_insert` / `block_move` / `block_remove` / `block_replace` | Structure the page |
 | `get_post` / `update_post` | Read / full-body write (block-safe) |
 | `create_post` | Create page/post/CPT with block-safe body |
 | `render_post` | Rendered `do_blocks` HTML to verify an edit |
-| `acf_get` / `acf_update` | POST/user/term/**options** ACF fields (NOT block fields) |
+| `acf_get` / `acf_update` | POST/user/term/comment/**options** ACF fields (NOT block fields) |
 | `upload_media` / `upload_begin`·`upload_chunk`·`upload_finish` | Media through resize+webp |
 | `wploc_get_translations` / `wploc_link_translation` / `wploc_create_translation` | Translations |
 | `safe_delete` | Translation-aware delete |
+| `wp_cli` | Privileged backstop; server ops only when separately enabled, never edit source files |
 | `wc_sync_product` / `wc_synced_meta_keys` | Sync product data across languages / list mirrored meta (optional addon) |
 | `mc_get_config` / `mc_set_rate` / `mc_set_product_prices` | Currencies, exchange rates, per-currency product prices (optional addon) |
 | `seo_get` / `seo_update` / `seo_get_strings` / `seo_update_strings` | Per-post AIOSEO fields per language, global SEO string translations (optional addon) |
-| `wp_cli` | God-mode backstop (content only — never code; see §0) |
