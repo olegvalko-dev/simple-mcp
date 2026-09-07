@@ -49,13 +49,13 @@ class Simple_MCP_Tools {
     static function core_defs() {
         return [
             'wp_cli' => [
-                'description' => 'Run any WP-CLI command server-side (omit the leading "wp"; --path is added automatically). Returns stdout/stderr/exit_code. This is a separate privileged subprocess: it does NOT inherit the authenticated HTTP user\'s object-level capability checks and is therefore exposed only to manage_options roles. Destructive subcommands are deny-listed and shell metacharacters/chaining are blocked. SCOPE: this MCP is primarily for CONTENT, options, media, taxonomies and translations. Never edit PHP/JS/CSS or other theme/plugin source files here: source is managed via git and server-side edits drift. Plugin/theme install, update and delete operations plus wp-config writes are server ops and require the separate Server ops permission; always confirm destructive ones. For content edits prefer the typed tools (block_*, acf_*, wploc_*, create_post, upload_media) over raw wp_cli. ARGUMENT QUOTING: the command is tokenized shell-style (quotes respected) then executed without a shell (argv), so pass text values literally and quoted, e.g. post update 12 --post_title="My Title". NEVER JSON-encode a value: JSON escapes non-ASCII to \uXXXX and that raw \uXXXX text is then saved verbatim (a Cyrillic title would appear in the DB as the raw text backslash-u-0417 backslash-u-0430 ... instead of the real letters). For any write that carries human text (titles, excerpts, field values) use the typed tools update_post / create_post / acf_update instead of wp_cli.',
+                'description' => 'Run any WP-CLI command server-side (omit the leading "wp"; --path is added automatically). Returns stdout/stderr/exit_code. This is a separate privileged subprocess: it does NOT inherit the authenticated HTTP user\'s object-level capability checks and is therefore exposed only to manage_options roles. Destructive subcommands are deny-listed and shell metacharacters/chaining are blocked. SCOPE: this MCP is primarily for CONTENT, options, media, taxonomies and translations. Never edit PHP/JS/CSS or other theme/plugin source files here: source is managed via git and server-side edits drift. Plugin/theme install, update and delete operations plus wp-config writes are server ops and require the separate Server ops permission; always confirm destructive ones. For content edits prefer the typed tools (block_*, acf_*, wploc_*, create_post, upload_media) over raw wp_cli. ARGUMENT QUOTING: the command is tokenized shell-style (quotes respected) then executed without a shell (argv), so pass text values literally and quoted, e.g. post update 12 --post_title="My Title". If a value contains spaces, prefer the "args" input instead of "command": it takes the argv array verbatim with no tokenization, so nothing has to be quoted or escaped. NEVER JSON-encode a value: JSON escapes non-ASCII to \uXXXX and that raw \uXXXX text is then saved verbatim (a Cyrillic title would appear in the DB as the raw text backslash-u-0417 backslash-u-0430 ... instead of the real letters). For any write that carries human text (titles, excerpts, field values) use the typed tools update_post / create_post / acf_update instead of wp_cli.',
                 'inputSchema' => [
                     'type'       => 'object',
                     'properties' => [
-                        'command' => ['type' => 'string', 'description' => 'WP-CLI command without "wp", e.g. "option get blogname" or "post list --post_type=page --format=json". Pass argument values literally and quoted; never JSON-encode text (non-ASCII gets \uXXXX-escaped and saved verbatim) — for human-text writes use the typed tools (update_post/create_post/acf_update).'],
+                        'command' => ['type' => 'string', 'description' => 'WP-CLI command without "wp", e.g. "option get blogname" or "post list --post_type=page --format=json". Tokenized shell-style. Never JSON-encode text (non-ASCII gets \uXXXX-escaped and saved verbatim). For a value containing spaces prefer "args" — it needs no quoting at all.'],
+                        'args'    => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'Alternative to "command": the argv array, one element per argument, used verbatim with NO tokenization — so values may contain spaces, quotes and non-ASCII without escaping, e.g. ["option","update","blogname_ru","EKABEAUTY — Интернет-магазин"]. Pass either "command" or "args", not both.'],
                     ],
-                    'required'   => ['command'],
                 ],
                 'callback' => [__CLASS__, 'tool_wp_cli'],
             ],
@@ -324,15 +324,34 @@ class Simple_MCP_Tools {
         if (!Simple_MCP_Auth::perm('wp_cli')) {
             return self::err('Інструмент wp_cli недоступний для ролі цього користувача');
         }
-        $command = trim((string) ($args['command'] ?? ''));
-        if ($command === '') return self::err('Порожня команда');
-        $command = trim(preg_replace('/^\s*wp\s+/i', '', $command)); // прибираємо зайве "wp "
+        $has_argv = array_key_exists('args', $args) && $args['args'] !== null;
+        if ($has_argv && trim((string) ($args['command'] ?? '')) !== '') {
+            return self::err('Передайте або "command", або "args", але не обидва.');
+        }
 
-        // Токенізуємо як shell (з урахуванням лапок), але ВИКОНУЄМО без шелла (proc_open argv).
-        // Це структурно унеможливлює чейнінг/сабшели й лапкові обходи deny-list.
-        $tokens = self::tokenize($command);
-        if ($tokens === null) {
-            return self::err('Некоректна команда: заборонені шелл-метасимволи (; & | ` $() < >) або незакриті лапки.');
+        if ($has_argv) {
+            // argv напряму: жодної токенізації, тому значення можуть містити пробіли,
+            // лапки й не-ASCII без екранування. Шелла тут немає, тож метасимволи безпечні,
+            // а deny-list звіряється по точних токенах — обійти лапками неможливо.
+            if (!is_array($args['args'])) return self::err('"args" має бути масивом рядків');
+            $tokens = [];
+            foreach ($args['args'] as $a) {
+                if (is_array($a) || is_object($a)) return self::err('"args" має бути масивом рядків');
+                $tokens[] = (string) $a;
+            }
+            if (!empty($tokens) && strtolower($tokens[0]) === 'wp') array_shift($tokens); // прибираємо зайве "wp"
+            $command = implode(' ', $tokens); // лише для відповіді/логу
+        } else {
+            $command = trim((string) ($args['command'] ?? ''));
+            if ($command === '') return self::err('Порожня команда');
+            $command = trim(preg_replace('/^\s*wp\s+/i', '', $command)); // прибираємо зайве "wp "
+
+            // Токенізуємо як shell (з урахуванням лапок), але ВИКОНУЄМО без шелла (proc_open argv).
+            // Це структурно унеможливлює чейнінг/сабшели й лапкові обходи deny-list.
+            $tokens = self::tokenize($command);
+            if ($tokens === null) {
+                return self::err('Некоректна команда: заборонені шелл-метасимволи (; & | ` $() < >) або незакриті лапки.');
+            }
         }
         if (empty($tokens)) return self::err('Порожня команда');
 
